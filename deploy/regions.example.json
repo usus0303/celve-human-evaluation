@@ -1,0 +1,8 @@
+{
+  "name": "CELVE Human Evaluation",
+  "regions": [
+    {"id": "east_asia", "name": "동아시아", "countries": ["CN", "KR", "JP"], "evaluator": "01", "zip": "region_a.zip"},
+    {"id": "south_asia", "name": "남아시아", "countries": ["BD", "PK", "IN"], "evaluator": "02", "zip": "region_b.zip"},
+    {"id": "southeast_asia", "name": "동남아시아", "countries": ["ID", "TH", "SG"], "evaluator": "03", "zip": "region_c.zip"}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "CELVE Human Evaluation",
+  "model_key": "llama3_2_11b",
+  "seed": 42,
+  "max_per_cell": 4,
+  "project_root": "/home/young/Vlm-interpretability",
+  "backup_root": "/home/young/CONAN_FINAL_BACKUP_20260907",
+  "regions": [
+    {"id": "east_asia", "name": "동아시아", "countries": ["CN", "KR", "JP"], "evaluator": "01"},
+    {"id": "south_asia", "name": "남아시아", "countries": ["BD", "PK", "IN"], "evaluator": "02"},
+    {"id": "southeast_asia", "name": "동남아시아", "countries": ["ID", "TH", "SG"], "evaluator": "03"}
+  ],
+  "runs": [
+    {"split": "split_01", "description_file": "/home/young/CONAN_FINAL_BACKUP_20260907/08_description/llama3_2_11b/patch_caption_en_v2/split_01/patch_descriptions_Q0.75_testall_en_5d0a92a4be4c.json"},
+    {"split": "split_02", "description_file": "REPLACE_WITH_EXACT_SPLIT_02_DESCRIPTION.json"},
+    {"split": "split_03", "description_file": "REPLACE_WITH_EXACT_SPLIT_03_DESCRIPTION.json"},
+    {"split": "split_04", "description_file": "REPLACE_WITH_EXACT_SPLIT_04_DESCRIPTION.json"},
+    {"split": "split_05", "description_file": "REPLACE_WITH_EXACT_SPLIT_05_DESCRIPTION.json"}
+  ]
+}
