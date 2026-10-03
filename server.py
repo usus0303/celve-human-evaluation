@@ -180,11 +180,11 @@ def create_app(state=BASE / 'state', secure_cookies=False):
     @app.get('/favicon.svg')
     def favicon():
         return send_file(BASE / 'static' / 'favicon.svg')
-        
+
     @app.get('/review')
     def researcher_review_page():
         return send_file(BASE / 'static' / 'review.html', max_age=0)
-    
+
     @app.get('/healthz')
     def health():
         return jsonify(status='ok')
@@ -366,29 +366,62 @@ def create_app(state=BASE / 'state', secure_cookies=False):
                              'region_name': assignments[evaluator]['region_name']})
         return jsonify(name=manifest['name'], studyId=active, images=len(items),
                        patches=sum(len(i['patches']) for i in study['items']), progress=progress,
-                       provenance=manifest['provenance'],
-                       selectionId=manifest.get('selection_manifest', {}).get('selection_id'),
-                       samplingQuotas=manifest.get('selection_manifest', {}).get('quotas'))
+                       provenance=manifest['provenance'])
+
     @app.get('/api/admin/review')
     @authenticated
     def admin_review():
-        """Researcher-only payload for browsing all study images and patches."""
-
+        """Researcher-only browser payload for inspecting every study image and patch."""
         if g.role != 'researcher':
             raise Problem('Researcher access is required.', 403)
-
         study_check()
 
-    # 각 이미지가 어떤 evaluator / region에 배정됐는지 기록
-    image_assignment = {}
-
-        for evaluator, entry in assignments.items():
-            for image_id in entry['image_ids']:
-                image_assignment[image_id] = {
-                    'evaluator': evaluator,
-                    'region_id': entry.get('region_id'),
-                    'region_name': entry.get('region_name'),
+        # Regional studies assign each image to exactly one evaluator. Older shared-image
+        # studies do not have an explicit assignments object, so leave this metadata blank.
+        image_assignment = {}
+        raw_assignments = manifest.get('assignments')
+        if isinstance(raw_assignments, dict):
+            for evaluator, entry in assignments.items():
+                for image_id in entry['image_ids']:
+                    image_assignment[image_id] = {
+                        'evaluator': evaluator,
+                        'region_id': entry.get('region_id'),
+                        'region_name': entry.get('region_name'),
                     }
+
+        country_ids = [country['id'] for country in study['countries']]
+        review_items = []
+        for position, item in enumerate(study['items'], start=1):
+            image_id = item['image_id']
+            ref = manifest['analysis'][image_id]
+            comparisons = ref['country_comparison']
+            cp_countries = [country for country in country_ids if comparisons[country]['tf_evaluated']]
+            retained = {
+                country: list(comparisons[country]['retained_patch_ids'])
+                for country in cp_countries
+                if comparisons[country]['retained_patch_ids']
+            }
+            public_item = copy.deepcopy(item)
+            public_item['original_image'] += '?study_id=' + active
+            for patch in public_item['patches']:
+                patch['image'] += '?study_id=' + active
+            source_key = ref.get('source_key', '')
+            source_parts = source_key.replace('\\', '/').split('/') if isinstance(source_key, str) else []
+            review_items.append({
+                **public_item,
+                'position': position,
+                'source_key': source_key,
+                'source_country': ref.get('source_country'),
+                'category': source_parts[1] if len(source_parts) > 2 else None,
+                'cp_countries': cp_countries,
+                'refined_countries': list(retained),
+                'retained_patches_by_country': retained,
+                'description': manifest['descriptions'][image_id]['description'],
+                **image_assignment.get(image_id, {'evaluator': None, 'region_id': None, 'region_name': None}),
+            })
+        return jsonify(name=manifest['name'], studyId=active, total=len(review_items),
+                       countries=study['countries'], items=review_items)
+
     @app.get('/api/export')
     @authenticated
     def export():
@@ -419,7 +452,6 @@ def create_app(state=BASE / 'state', secure_cookies=False):
                             'region_id': assignments[row['evaluator']]['region_id'],
                             'region_name': assignments[row['evaluator']]['region_name'],
                             'image_number': assignments[row['evaluator']]['image_ids'].index(row['image_id']) + 1,
-                            **{k: ref.get(k) for k in ('source_country', 'split', 'category', 'run_id', 'selection_id', 'description_sha256')},
                             'answers': answers, 'comparisons': comparison(answers, ref)})
         provenance = manifest['provenance'] if g.role == 'researcher' else [p for p in manifest['provenance'] if p.get('evaluator', evaluator) == evaluator]
         result = {'study_id': active, 'exported_at': utcnow(), 'provenance': provenance,
@@ -429,7 +461,7 @@ def create_app(state=BASE / 'state', secure_cookies=False):
         if request.args.get('format') == 'csv':
             out = io.StringIO(newline='')
             writer = csv.writer(out)
-            writer.writerow(['study_id','evaluator','region_id','region_name','image_number','image_id','source_key','source_country','split','category','run_id','selection_id','description_sha256','country_mode','country','evidence_status','tf_evaluated','human_patch_ids','model_patch_ids','comparable','precision','recall','jaccard','both_empty','description_rating','rating_unsure','locked_at','submitted_at'])
+            writer.writerow(['study_id','evaluator','region_id','region_name','image_number','image_id','source_key','country_mode','country','evidence_status','tf_evaluated','human_patch_ids','model_patch_ids','comparable','precision','recall','jaccard','both_empty','description_rating','rating_unsure','locked_at','submitted_at'])
             def cell(value):
                 if value is None:
                     return ''
@@ -438,7 +470,7 @@ def create_app(state=BASE / 'state', secure_cookies=False):
             for record in records:
                 a = record['answers']
                 for c in record['comparisons'] or [{}]:
-                    writer.writerow([cell(v) for v in [active,record['evaluator'],record['region_id'],record['region_name'],record['image_number'],record['image_id'],record['source_key'],record['source_country'],record['split'],record['category'],record['run_id'],record['selection_id'],record['description_sha256'],a['countryMode'],c.get('country'),c.get('evidence_status','unassessed'),c.get('tf_evaluated'),
+                    writer.writerow([cell(v) for v in [active,record['evaluator'],record['region_id'],record['region_name'],record['image_number'],record['image_id'],record['source_key'],a['countryMode'],c.get('country'),c.get('evidence_status','unassessed'),c.get('tf_evaluated'),
                                      '|'.join(c['human_patch_ids']) if c.get('human_patch_ids') is not None else None,
                                      '|'.join(c['model_patch_ids']) if c.get('model_patch_ids') is not None else None,
                                      c.get('comparable',False),c.get('precision'),c.get('recall'),c.get('jaccard'),c.get('both_empty'),a.get('rating'),a.get('ratingUnsure'),a.get('lockedAt'),a.get('submittedAt')]])
