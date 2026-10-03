@@ -180,7 +180,11 @@ def create_app(state=BASE / 'state', secure_cookies=False):
     @app.get('/favicon.svg')
     def favicon():
         return send_file(BASE / 'static' / 'favicon.svg')
-
+        
+    @app.get('/review')
+    def researcher_review_page():
+        return send_file(BASE / 'static' / 'review.html', max_age=0)
+    
     @app.get('/healthz')
     def health():
         return jsonify(status='ok')
@@ -365,7 +369,26 @@ def create_app(state=BASE / 'state', secure_cookies=False):
                        provenance=manifest['provenance'],
                        selectionId=manifest.get('selection_manifest', {}).get('selection_id'),
                        samplingQuotas=manifest.get('selection_manifest', {}).get('quotas'))
+    @app.get('/api/admin/review')
+    @authenticated
+    def admin_review():
+        """Researcher-only payload for browsing all study images and patches."""
 
+        if g.role != 'researcher':
+            raise Problem('Researcher access is required.', 403)
+
+        study_check()
+
+    # 각 이미지가 어떤 evaluator / region에 배정됐는지 기록
+    image_assignment = {}
+
+        for evaluator, entry in assignments.items():
+            for image_id in entry['image_ids']:
+                image_assignment[image_id] = {
+                    'evaluator': evaluator,
+                    'region_id': entry.get('region_id'),
+                    'region_name': entry.get('region_name'),
+                    }
     @app.get('/api/export')
     @authenticated
     def export():
